@@ -2,6 +2,7 @@ import os
 import copy
 import time
 import random
+import warnings
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -13,6 +14,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, models
 
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # =========================================================
 # CẤU HÌNH
@@ -23,13 +25,14 @@ TEST_CSV = "../processed_ffpp/splits/test.csv"
 
 OUTPUT_DIR = "./training_outputs/efficientnet_b0_ffpp"
 BEST_MODEL_PATH = os.path.join(OUTPUT_DIR, "best_model.pth")
+HISTORY_PATH = os.path.join(OUTPUT_DIR, "training_history.csv")
 
 IMAGE_SIZE = 224
 BATCH_SIZE = 32
 NUM_EPOCHS = 15
 LEARNING_RATE = 1e-4
 WEIGHT_DECAY = 1e-4
-NUM_WORKERS = 0
+NUM_WORKERS = 4
 RANDOM_SEED = 42
 
 # True = khóa backbone, chỉ train head
@@ -49,7 +52,9 @@ def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
 
 
 def create_folder(path):
@@ -57,12 +62,23 @@ def create_folder(path):
         os.makedirs(path)
 
 
+def print_device_info():
+    print("===== THÔNG TIN THIẾT BỊ =====")
+    print(f"Thiết bị: {DEVICE}")
+    print(f"CUDA available: {torch.cuda.is_available()}")
+    if torch.cuda.is_available():
+        print(f"Tên GPU: {torch.cuda.get_device_name(0)}")
+        props = torch.cuda.get_device_properties(0)
+        print(f"VRAM tổng: {props.total_memory / (1024 ** 3):.2f} GB")
+    print("================================\n")
+
+
 # =========================================================
 # DATASET
 # =========================================================
 class FFPPDataset(Dataset):
     def __init__(self, csv_path, transform=None):
-        self.df = pd.read_csv(csv_path)
+        self.df = pd.read_csv(csv_path).copy()
         self.transform = transform
         self.csv_path = csv_path
 
@@ -90,9 +106,13 @@ class FFPPDataset(Dataset):
 
         self.df["image_path"] = self.df["image_path"].apply(resolve_image_path)
 
-        # Bỏ các dòng có file không tồn tại
+        before_count = len(self.df)
         exists_mask = self.df["image_path"].apply(os.path.exists)
         self.df = self.df[exists_mask].reset_index(drop=True)
+        removed_count = before_count - len(self.df)
+
+        if removed_count > 0:
+            print(f"[{os.path.basename(csv_path)}] Đã loại {removed_count} ảnh không tồn tại.")
 
         if len(self.df) == 0:
             raise ValueError(f"Không còn ảnh hợp lệ trong {csv_path}")
@@ -177,11 +197,11 @@ def run_one_epoch(model, dataloader, criterion, optimizer=None):
     all_preds = []
 
     for images, labels in dataloader:
-        images = images.to(DEVICE)
-        labels = labels.to(DEVICE)
+        images = images.to(DEVICE, non_blocking=(DEVICE.type == "cuda"))
+        labels = labels.to(DEVICE, non_blocking=(DEVICE.type == "cuda"))
 
         if is_train:
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
 
         with torch.set_grad_enabled(is_train):
             outputs = model(images)
@@ -194,7 +214,6 @@ def run_one_epoch(model, dataloader, criterion, optimizer=None):
         running_loss += loss.item() * images.size(0)
 
         preds = torch.argmax(outputs, dim=1)
-
         all_labels.extend(labels.detach().cpu().numpy().tolist())
         all_preds.extend(preds.detach().cpu().numpy().tolist())
 
@@ -211,7 +230,7 @@ def build_model(num_classes=2, freeze_backbone=False):
     model = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.DEFAULT)
 
     if freeze_backbone:
-        for param in model.parameters():
+        for param in model.features.parameters():
             param.requires_grad = False
 
     in_features = model.classifier[1].in_features
@@ -227,14 +246,20 @@ def main():
     set_seed(RANDOM_SEED)
     create_folder(OUTPUT_DIR)
 
+    if DEVICE.type == "cuda":
+        torch.backends.cudnn.benchmark = True
+
+    print_device_info()
+
     print("===== THÔNG TIN THỰC NGHIỆM =====")
-    print(f"Thiết bị: {DEVICE}")
     print(f"Train CSV: {TRAIN_CSV}")
     print(f"Val CSV:   {VAL_CSV}")
     print(f"Test CSV:  {TEST_CSV}")
     print(f"BATCH_SIZE: {BATCH_SIZE}")
     print(f"NUM_EPOCHS: {NUM_EPOCHS}")
     print(f"LEARNING_RATE: {LEARNING_RATE}")
+    print(f"WEIGHT_DECAY: {WEIGHT_DECAY}")
+    print(f"NUM_WORKERS: {NUM_WORKERS}")
     print(f"FREEZE_BACKBONE: {FREEZE_BACKBONE}")
     print(f"USE_CLASS_WEIGHTS: {USE_CLASS_WEIGHTS}")
     print("=================================\n")
@@ -251,29 +276,31 @@ def main():
         train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=NUM_WORKERS
+        num_workers=NUM_WORKERS,
+        pin_memory=(DEVICE.type == "cuda")
     )
 
     val_loader = DataLoader(
         val_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=NUM_WORKERS
+        num_workers=NUM_WORKERS,
+        pin_memory=(DEVICE.type == "cuda")
     )
 
     test_loader = DataLoader(
         test_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=NUM_WORKERS
+        num_workers=NUM_WORKERS,
+        pin_memory=(DEVICE.type == "cuda")
     )
 
     model = build_model(num_classes=2, freeze_backbone=FREEZE_BACKBONE)
     model = model.to(DEVICE)
 
     if USE_CLASS_WEIGHTS:
-        train_df = pd.read_csv(TRAIN_CSV)
-        class_counts = train_df["label"].value_counts().sort_index()
+        class_counts = train_dataset.df["label"].value_counts().sort_index()
 
         count_real = int(class_counts.get(0, 0))
         count_fake = int(class_counts.get(1, 0))
@@ -284,8 +311,9 @@ def main():
 
         class_weights = torch.tensor(
             [weight_real, weight_fake],
-            dtype=torch.float32
-        ).to(DEVICE)
+            dtype=torch.float32,
+            device=DEVICE
+        )
 
         print("Class weights:")
         print(f"  Real (0): {weight_real:.4f}")
@@ -384,9 +412,9 @@ def main():
     print(test_metrics["confusion_matrix"])
 
     history_df = pd.DataFrame(history)
-    history_path = os.path.join(OUTPUT_DIR, "training_history.csv")
-    history_df.to_csv(history_path, index=False, encoding="utf-8")
-    print(f"\nĐã lưu lịch sử train tại: {history_path}")
+    history_df.to_csv(HISTORY_PATH, index=False, encoding="utf-8")
+    print(f"\nĐã lưu lịch sử train tại: {HISTORY_PATH}")
+    print(f"Đã lưu best model tại: {BEST_MODEL_PATH}")
 
 
 if __name__ == "__main__":
