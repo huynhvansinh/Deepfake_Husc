@@ -2,8 +2,8 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 
-CSV_PATH = "./training_outputs/resnet18_ffpp/training_history.csv"
-OUTPUT_DIR = "./training_outputs/resnet18_ffpp/plots"
+CSV_PATH = "./training_outputs/densenet121_ffpp_v3/training_history.csv"
+OUTPUT_DIR = "./training_outputs/densenet121_ffpp_v3/plots"
 
 def create_folder(path):
     if not os.path.exists(path):
@@ -38,7 +38,7 @@ def main():
         df=df,
         x_col="epoch",
         y_cols=["train_loss", "val_loss"],
-        title="Loss theo Epoch - ResNet18 FFPP",
+        title="Loss theo Epoch - DenseNet121 FFPP",
         ylabel="Loss",
         save_path=os.path.join(OUTPUT_DIR, "loss_plot.png")
     )
@@ -48,7 +48,7 @@ def main():
         df=df,
         x_col="epoch",
         y_cols=["train_acc", "val_acc"],
-        title="Accuracy theo Epoch - ResNet18 FFPP",
+        title="Accuracy theo Epoch - DenseNet121 FFPP",
         ylabel="Accuracy",
         save_path=os.path.join(OUTPUT_DIR, "accuracy_plot.png")
     )
@@ -58,7 +58,7 @@ def main():
         df=df,
         x_col="epoch",
         y_cols=["train_f1", "val_f1"],
-        title="F1-score theo Epoch - ResNet18 FFPP",
+        title="F1-score theo Epoch - DenseNet121 FFPP",
         ylabel="F1-score",
         save_path=os.path.join(OUTPUT_DIR, "f1_plot.png")
     )
@@ -68,7 +68,7 @@ def main():
         df=df,
         x_col="epoch",
         y_cols=["train_precision", "val_precision"],
-        title="Precision theo Epoch - ResNet18 FFPP",
+        title="Precision theo Epoch - DenseNet121 FFPP",
         ylabel="Precision",
         save_path=os.path.join(OUTPUT_DIR, "precision_plot.png")
     )
@@ -78,7 +78,7 @@ def main():
         df=df,
         x_col="epoch",
         y_cols=["train_recall", "val_recall"],
-        title="Recall theo Epoch - ResNet18 FFPP",
+        title="Recall theo Epoch - DenseNet121 FFPP",
         ylabel="Recall",
         save_path=os.path.join(OUTPUT_DIR, "recall_plot.png")
     )
