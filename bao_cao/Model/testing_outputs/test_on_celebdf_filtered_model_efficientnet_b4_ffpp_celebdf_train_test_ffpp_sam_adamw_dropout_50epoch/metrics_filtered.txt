@@ -1,0 +1,24 @@
+===== TEST MODEL ON FILTERED CSV =====
+
+Loss:      0.094131
+Accuracy:  0.984919
+Precision: 0.981972
+Recall:    0.999713
+F1-score:  0.990763
+Time:      32.46 seconds
+
+===== CONFUSION MATRIX =====
+Rows = Actual, Columns = Predicted
+           Pred_REAL_0  Pred_FAKE_1
+Actual_REAL_0    1518          128
+Actual_FAKE_1    2          6972
+
+===== CLASSIFICATION REPORT =====
+              precision    recall  f1-score   support
+
+      REAL_0       1.00      0.92      0.96      1646
+      FAKE_1       0.98      1.00      0.99      6974
+
+    accuracy                           0.98      8620
+   macro avg       0.99      0.96      0.97      8620
+weighted avg       0.99      0.98      0.98      8620
