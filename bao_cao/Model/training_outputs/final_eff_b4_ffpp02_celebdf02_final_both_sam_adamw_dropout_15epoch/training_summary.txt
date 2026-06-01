@@ -1,0 +1,45 @@
+===== TRAINING SUMMARY =====
+============================
+Total train time: 61335.02 seconds
+Total train time: 1022.25 minutes
+Total train time: 17.04 hours
+
+===== BEST VALIDATION =====
+Best Val F1: 0.983211
+
+===== TEST METRICS =====
+Test Loss:      0.370004
+Test Accuracy:  0.977496
+Test Precision: 0.987544
+Test Recall:    0.984241
+Test F1-score:  0.985890
+
+===== CONFUSION MATRIX =====
+[[ 9666   501]
+ [  636 39721]]
+
+===== CONFIG =====
+IMAGE_SIZE: 224
+BATCH_SIZE: 4
+NUM_EPOCHS: 15
+LEARNING_RATE: 6.139426050898147e-05
+WEIGHT_DECAY: 1.7654048052495086e-05
+DROPOUT_P: 0.4080272084711243
+LABEL_SMOOTHING: 0.06560523352119356
+USE_SAM: True
+SAM_RHO: 0.034788356442042166
+SAM_ADAPTIVE: False
+USE_CLASS_WEIGHTS: True
+FREEZE_BACKBONE: False
+
+Train CSV list:
+- ../processed_ffpp_02/splits/train.csv
+- ../processed_celebdf_02/splits/train.csv
+
+Val CSV list:
+- ../processed_ffpp_02/splits/val.csv
+- ../processed_celebdf_02/splits/val.csv
+
+Test CSV list:
+- ../processed_ffpp_02/splits/test.csv
+- ../processed_celebdf_02/splits/test.csv

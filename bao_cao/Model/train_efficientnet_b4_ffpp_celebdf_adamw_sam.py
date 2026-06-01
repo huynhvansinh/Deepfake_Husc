@@ -1,6 +1,7 @@
 import os
 import copy
 import time
+import json
 import random
 import warnings
 import numpy as np
@@ -23,21 +24,23 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 # ========== TRAIN: FFPP + Celeb-DF ==========
 TRAIN_CSV_LIST = [
-    "../processed_ffpp/splits/train.csv",
-    "../processed_celebdf_02/splits_blur20/train.csv",
+    "../processed_ffpp_02/splits/train.csv",
+    "../processed_celebdf_02/splits/train.csv",
 ]
 
-# Validation cũng dùng cả 2 dataset để chọn best model ổn hơn.
-# Nếu anh muốn validation chỉ FFPP thì chỉ giữ dòng FFPP.
+# ========== VALIDATION: FFPP + Celeb-DF ==========
 VAL_CSV_LIST = [
-    "../processed_ffpp/splits/val.csv",
-    "../processed_celebdf_02/splits_blur20/val.csv",
+    "../processed_ffpp_02/splits/val.csv",
+    "../processed_celebdf_02/splits/val.csv",
 ]
 
-# ========== TEST: chỉ FFPP ==========
-TEST_CSV = "../processed_ffpp/splits/test.csv"
+# ========== TEST: FFPP + Celeb-DF ==========
+TEST_CSV_LIST = [
+    "../processed_ffpp_02/splits/test.csv",
+    "../processed_celebdf_02/splits/test.csv",
+]
 
-OUTPUT_DIR = "./training_outputs/efficientnet_b4_ffpp_celebdf_train_test_ffpp_sam_adamw_dropout_50epoch"
+OUTPUT_DIR = "./training_outputs/final_eff_b4_ffpp02_celebdf02_final_both_sam_adamw_dropout_15epoch"
 
 BEST_MODEL_PATH = os.path.join(OUTPUT_DIR, "best_model.pth")
 LAST_MODEL_PATH = os.path.join(OUTPUT_DIR, "last_model.pth")
@@ -46,15 +49,19 @@ HISTORY_PATH = os.path.join(OUTPUT_DIR, "training_history.csv")
 CONFUSION_MATRIX_CSV_PATH = os.path.join(OUTPUT_DIR, "confusion_matrix_test.csv")
 CONFUSION_MATRIX_NPY_PATH = os.path.join(OUTPUT_DIR, "confusion_matrix_test.npy")
 
+# File tổng kết cuối cùng
+SUMMARY_TXT_PATH = os.path.join(OUTPUT_DIR, "training_summary.txt")
+SUMMARY_JSON_PATH = os.path.join(OUTPUT_DIR, "training_summary.json")
+
 IMAGE_SIZE = 224
 
 # EfficientNet-B4 khá nặng.
 # Nếu CUDA out of memory thì giảm BATCH_SIZE xuống 2 hoặc 4.
 BATCH_SIZE = 4
 
-NUM_EPOCHS = 50
-LEARNING_RATE = 1e-4
-WEIGHT_DECAY = 1e-4
+NUM_EPOCHS = 15
+LEARNING_RATE = 6.139426050898147e-05
+WEIGHT_DECAY = 1.7654048052495086e-05
 NUM_WORKERS = 4
 RANDOM_SEED = 42
 
@@ -65,10 +72,10 @@ FREEZE_BACKBONE = False
 USE_CLASS_WEIGHTS = True
 
 # Dropout tùy chỉnh ở classifier
-DROPOUT_P = 0.4
+DROPOUT_P = 0.4080272084711243
 
 # Label smoothing giúp model bớt quá tự tin
-LABEL_SMOOTHING = 0.05
+LABEL_SMOOTHING = 0.06560523352119356
 
 
 # =========================================================
@@ -77,7 +84,7 @@ LABEL_SMOOTHING = 0.05
 USE_SAM = True
 
 # rho càng lớn regularize càng mạnh, nhưng dễ học chậm hơn
-SAM_RHO = 0.05
+SAM_RHO = 0.034788356442042166
 
 # False = SAM thường
 # True = ASAM-like adaptive perturbation
@@ -118,6 +125,102 @@ def print_device_info():
         print(f"VRAM tổng: {props.total_memory / (1024 ** 3):.2f} GB")
 
     print("================================\n")
+
+
+def save_training_summary(
+    txt_path,
+    json_path,
+    total_time_seconds,
+    best_val_f1,
+    test_loss,
+    test_metrics,
+    confusion_matrix_value
+):
+    total_time_minutes = total_time_seconds / 60.0
+    total_time_hours = total_time_seconds / 3600.0
+
+    summary = {
+        "total_train_time_seconds": float(total_time_seconds),
+        "total_train_time_minutes": float(total_time_minutes),
+        "total_train_time_hours": float(total_time_hours),
+
+        "best_val_f1": float(best_val_f1),
+
+        "test_loss": float(test_loss),
+        "test_accuracy": float(test_metrics["accuracy"]),
+        "test_precision": float(test_metrics["precision"]),
+        "test_recall": float(test_metrics["recall"]),
+        "test_f1": float(test_metrics["f1"]),
+
+        "confusion_matrix": confusion_matrix_value.tolist(),
+
+        "train_csv_list": TRAIN_CSV_LIST,
+        "val_csv_list": VAL_CSV_LIST,
+        "test_csv_list": TEST_CSV_LIST,
+
+        "image_size": IMAGE_SIZE,
+        "batch_size": BATCH_SIZE,
+        "num_epochs": NUM_EPOCHS,
+        "learning_rate": LEARNING_RATE,
+        "weight_decay": WEIGHT_DECAY,
+        "dropout_p": DROPOUT_P,
+        "label_smoothing": LABEL_SMOOTHING,
+        "use_sam": USE_SAM,
+        "sam_rho": SAM_RHO,
+        "sam_adaptive": SAM_ADAPTIVE,
+        "use_class_weights": USE_CLASS_WEIGHTS,
+        "freeze_backbone": FREEZE_BACKBONE,
+    }
+
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=4)
+
+    with open(txt_path, "w", encoding="utf-8") as f:
+        f.write("===== TRAINING SUMMARY =====\n")
+        f.write("============================\n")
+        f.write(f"Total train time: {total_time_seconds:.2f} seconds\n")
+        f.write(f"Total train time: {total_time_minutes:.2f} minutes\n")
+        f.write(f"Total train time: {total_time_hours:.2f} hours\n\n")
+
+        f.write("===== BEST VALIDATION =====\n")
+        f.write(f"Best Val F1: {best_val_f1:.6f}\n\n")
+
+        f.write("===== TEST METRICS =====\n")
+        f.write(f"Test Loss:      {test_loss:.6f}\n")
+        f.write(f"Test Accuracy:  {test_metrics['accuracy']:.6f}\n")
+        f.write(f"Test Precision: {test_metrics['precision']:.6f}\n")
+        f.write(f"Test Recall:    {test_metrics['recall']:.6f}\n")
+        f.write(f"Test F1-score:  {test_metrics['f1']:.6f}\n\n")
+
+        f.write("===== CONFUSION MATRIX =====\n")
+        f.write(str(confusion_matrix_value))
+        f.write("\n\n")
+
+        f.write("===== CONFIG =====\n")
+        f.write(f"IMAGE_SIZE: {IMAGE_SIZE}\n")
+        f.write(f"BATCH_SIZE: {BATCH_SIZE}\n")
+        f.write(f"NUM_EPOCHS: {NUM_EPOCHS}\n")
+        f.write(f"LEARNING_RATE: {LEARNING_RATE}\n")
+        f.write(f"WEIGHT_DECAY: {WEIGHT_DECAY}\n")
+        f.write(f"DROPOUT_P: {DROPOUT_P}\n")
+        f.write(f"LABEL_SMOOTHING: {LABEL_SMOOTHING}\n")
+        f.write(f"USE_SAM: {USE_SAM}\n")
+        f.write(f"SAM_RHO: {SAM_RHO}\n")
+        f.write(f"SAM_ADAPTIVE: {SAM_ADAPTIVE}\n")
+        f.write(f"USE_CLASS_WEIGHTS: {USE_CLASS_WEIGHTS}\n")
+        f.write(f"FREEZE_BACKBONE: {FREEZE_BACKBONE}\n\n")
+
+        f.write("Train CSV list:\n")
+        for p in TRAIN_CSV_LIST:
+            f.write(f"- {p}\n")
+
+        f.write("\nVal CSV list:\n")
+        for p in VAL_CSV_LIST:
+            f.write(f"- {p}\n")
+
+        f.write("\nTest CSV list:\n")
+        for p in TEST_CSV_LIST:
+            f.write(f"- {p}\n")
 
 
 # =========================================================
@@ -235,9 +338,6 @@ class FaceDataset(Dataset):
     - label: 0 = REAL, 1 = FAKE
 
     Code tự resolve đường dẫn để chạy được khi file train nằm trong thư mục Model.
-    Ví dụ:
-    - ../processed_ffpp/splits/train.csv
-    - ../processed_celebdf/splits/train.csv
     """
 
     def __init__(self, csv_path, transform=None, source_name=None):
@@ -259,10 +359,6 @@ class FaceDataset(Dataset):
         self.df["source_name"] = self.source_name
 
         # Resolve đường dẫn ảnh.
-        # Giả định cấu trúc:
-        # D:/Nghiencuu/Model/script.py
-        # D:/Nghiencuu/processed_ffpp/splits/train.csv
-        # D:/Nghiencuu/processed_celebdf/splits/train.csv
         csv_abs_path = os.path.abspath(csv_path)
         splits_dir = os.path.dirname(csv_abs_path)
         processed_dir = os.path.dirname(splits_dir)
@@ -314,7 +410,7 @@ class FaceDataset(Dataset):
 class MultiCSVDataset(Dataset):
     """
     Gộp nhiều CSV thành 1 dataset.
-    Dùng cho train FFPP + CelebDF.
+    Dùng cho train/val/test FFPP + CelebDF.
     """
 
     def __init__(self, csv_paths, transform=None, split_name="train"):
@@ -579,7 +675,10 @@ def main():
     for p in VAL_CSV_LIST:
         print(f"  - {p}")
 
-    print(f"Test CSV: {TEST_CSV}")
+    print("Test CSV list:")
+    for p in TEST_CSV_LIST:
+        print(f"  - {p}")
+
     print(f"OUTPUT_DIR: {OUTPUT_DIR}")
     print(f"IMAGE_SIZE: {IMAGE_SIZE}")
     print(f"BATCH_SIZE: {BATCH_SIZE}")
@@ -614,16 +713,15 @@ def main():
         split_name="val"
     )
 
-    # Test chỉ dùng FFPP theo yêu cầu.
-    test_dataset = FaceDataset(
-        TEST_CSV,
+    test_dataset = MultiCSVDataset(
+        TEST_CSV_LIST,
         transform=eval_transform,
-        source_name="test_FFPP"
+        split_name="test"
     )
 
     print_dataset_stats(train_dataset, "TRAIN")
     print_dataset_stats(val_dataset, "VAL")
-    print_dataset_stats(test_dataset, "TEST - FFPP ONLY")
+    print_dataset_stats(test_dataset, "TEST - FFPP + CELEBDF")
 
     train_loader = DataLoader(
         train_dataset,
@@ -831,7 +929,7 @@ def main():
         model.load_state_dict(best_model_wts)
 
     print("===== ĐÁNH GIÁ TRÊN TEST SET - BEST MODEL =====")
-    print("Lưu ý: Test set chỉ dùng FFPP.")
+    print("Lưu ý: Test set dùng FFPP + CelebDF.")
 
     test_loss, test_metrics = run_one_epoch(
         model=model,
@@ -862,11 +960,26 @@ def main():
     cm_df.to_csv(CONFUSION_MATRIX_CSV_PATH, encoding="utf-8")
     np.save(CONFUSION_MATRIX_NPY_PATH, test_metrics["confusion_matrix"])
 
+    # =====================================================
+    # LƯU SUMMARY CUỐI CÙNG
+    # =====================================================
+    save_training_summary(
+        txt_path=SUMMARY_TXT_PATH,
+        json_path=SUMMARY_JSON_PATH,
+        total_time_seconds=total_time,
+        best_val_f1=best_val_f1,
+        test_loss=test_loss,
+        test_metrics=test_metrics,
+        confusion_matrix_value=test_metrics["confusion_matrix"]
+    )
+
     print(f"\nĐã lưu lịch sử train tại: {HISTORY_PATH}")
     print(f"Đã lưu best model tại: {BEST_MODEL_PATH}")
     print(f"Đã lưu last model tại: {LAST_MODEL_PATH}")
     print(f"Đã lưu confusion matrix CSV tại: {CONFUSION_MATRIX_CSV_PATH}")
     print(f"Đã lưu confusion matrix NPY tại: {CONFUSION_MATRIX_NPY_PATH}")
+    print(f"Đã lưu summary TXT tại: {SUMMARY_TXT_PATH}")
+    print(f"Đã lưu summary JSON tại: {SUMMARY_JSON_PATH}")
 
 
 if __name__ == "__main__":

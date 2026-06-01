@@ -1,0 +1,45 @@
+{
+    "total_train_time_seconds": 61335.02171468735,
+    "total_train_time_minutes": 1022.2503619114558,
+    "total_train_time_hours": 17.037506031857596,
+    "best_val_f1": 0.9832107390079421,
+    "test_loss": 0.37000357864306466,
+    "test_accuracy": 0.9774958435594965,
+    "test_precision": 0.9875441300780667,
+    "test_recall": 0.9842406521792998,
+    "test_f1": 0.9858896238474044,
+    "confusion_matrix": [
+        [
+            9666,
+            501
+        ],
+        [
+            636,
+            39721
+        ]
+    ],
+    "train_csv_list": [
+        "../processed_ffpp_02/splits/train.csv",
+        "../processed_celebdf_02/splits/train.csv"
+    ],
+    "val_csv_list": [
+        "../processed_ffpp_02/splits/val.csv",
+        "../processed_celebdf_02/splits/val.csv"
+    ],
+    "test_csv_list": [
+        "../processed_ffpp_02/splits/test.csv",
+        "../processed_celebdf_02/splits/test.csv"
+    ],
+    "image_size": 224,
+    "batch_size": 4,
+    "num_epochs": 15,
+    "learning_rate": 6.139426050898147e-05,
+    "weight_decay": 1.7654048052495086e-05,
+    "dropout_p": 0.4080272084711243,
+    "label_smoothing": 0.06560523352119356,
+    "use_sam": true,
+    "sam_rho": 0.034788356442042166,
+    "sam_adaptive": false,
+    "use_class_weights": true,
+    "freeze_backbone": false
+}
